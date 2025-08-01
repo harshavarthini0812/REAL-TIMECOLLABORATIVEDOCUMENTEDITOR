@@ -1,0 +1,77 @@
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+
+// App setup
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
+
+// Serve the editor UI
+app.get('/', (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Real-time Collaborative Editor</title>
+      <style>
+        body { font-family: sans-serif; text-align: center; margin-top: 30px; }
+        textarea { width: 90%; height: 70vh; font-size: 16px; padding: 10px; }
+      </style>
+    </head>
+    <body>
+      <h2>📝 Real-time Collaborative Editor</h2>
+      <textarea id="editor" placeholder="Start typing..."></textarea>
+
+      <script src="/socket.io/socket.io.js"></script>
+      <script>
+        const socket = io();
+        const editor = document.getElementById('editor');
+
+        // Send changes to server
+        editor.addEventListener('input', () => {
+          socket.emit('text-change', editor.value);
+        });
+
+        // Receive updates from server
+        socket.on('text-update', (newText) => {
+          if (editor.value !== newText) {
+            editor.value = newText;
+          }
+        });
+
+        // On load, request the current document
+        socket.on('load-text', (text) => {
+          editor.value = text;
+        });
+      </script>
+    </body>
+    </html>
+  `);
+});
+
+// Store shared text in memory
+let sharedText = '';
+
+io.on('connection', (socket) => {
+  console.log('🔗 A user connected');
+
+  // Send current text to new user
+  socket.emit('load-text', sharedText);
+
+  // Listen for text changes
+  socket.on('text-change', (newText) => {
+    sharedText = newText;
+    socket.broadcast.emit('text-update', newText); // Send to others
+  });
+
+  socket.on('disconnect', () => {
+    console.log('❌ A user disconnected');
+  });
+});
+
+// Start the server
+const PORT = 3000;
+server.listen(PORT, () => {
+  console.log(`🚀 Collaborative editor running at http://localhost:${PORT}`);
+});
